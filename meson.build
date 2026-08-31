@@ -1,10 +1,12 @@
 project(
   'nanobind',
   'cpp',
+  # 'src/version.py' prints the nanobind and nanobind-backend versions on
+  # separate lines; the project version is the first one.
   version: run_command(
     'src/version.py',
     check: true,
-  ).stdout().strip(),
+  ).stdout().strip().split('\n')[0].strip(),
   meson_version: '>=1.0.0',
   default_options: [
     'cpp_std=c++17',
