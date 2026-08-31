@@ -36,68 +36,112 @@ endif
 
 incdir = include_directories('include')
 
-# Arguments are derived from nanobind_build_library() in CMake configuration.
-dep_compile_args = []
-dep_link_args = []
+# Compile/link arguments, grouped to mirror the CMake configuration:
+#   'core_*' <- nanobind_build_library()  (the compiled nanobind core)
+#   'ext_*'  <- nanobind_add_module()      (a binding extension)
+#   'pub_*'  <- flags CMake marks PUBLIC on libnanobind (reach both)
+# The 'nanobind' dependency compiles the core into the consumer's extension, so
+# it transports the union of these groups.
 
 compiler = meson.get_compiler('cpp')
-if compiler.get_argument_syntax() == 'msvc'
-  dep_compile_args += ['/D_CRT_SECURE_NO_WARNINGS']
-endif
+is_msvc = compiler.get_argument_syntax() == 'msvc'
+is_windows = host_machine.system() == 'windows'
+is_darwin = host_machine.system() == 'darwin'
 
-# Discussion in WrapDB PR #1556 as to whether or not the following is necessary:
-# dep_compile_args += ['-fno-strict-aliasing']
+# NB_OPT / NB_OPT_SIZE generator expressions mapped to meson build types:
+#   NB_OPT_SIZE = Release, MinSizeRel, RelWithDebInfo  (any optimized build)
+#   NB_OPT      = Release, MinSizeRel                  (optimized, no debug info)
+nb_opt_size = get_option('optimization') in ['1', '2', '3', 's']
+nb_opt = nb_opt_size and not get_option('debug')
 
 freethreaded = py.get_variable('Py_GIL_DISABLED', 0) != 0
-if freethreaded
-  dep_compile_args += ['-DNB_FREE_THREADED']
+
+# Probe for the faster TLSDESC thread-local model (Linux/x86_64)
+nb_has_mtls_gnu2 = false
+if not (is_msvc or is_windows or is_darwin)
+  nb_has_mtls_gnu2 = compiler.has_argument('-mtls-dialect=gnu2')
 endif
 
-if not get_option('debug')
-  dep_compile_args += ['-DNB_COMPACT_ASSERTIONS']
+# PUBLIC flags on libnanobind: hidden visibility, plus section splitting so the
+# linker can drop unused core code in optimized builds.
+pub_args = []
+pub_link = []
+if not is_msvc
+  pub_args += '-fvisibility=hidden'
+endif
+if not is_windows and not is_darwin and nb_opt_size
+  pub_args += ['-ffunction-sections', '-fdata-sections']
+  pub_link += '-Wl,--gc-sections'
+endif
 
-  # The following, from nanobind_strip(), applies both to the nanobind shared
-  # library (if it's built) and to the developer's extension:
-  if host_machine.system() == 'darwin'
-    dep_link_args += ['-Wl,-dead_strip', '-Wl,-x', '-Wl,-S']
-  elif host_machine.system() != 'windows'
-    dep_link_args += ['-Wl,-s']
+# nanobind_build_library(): core-only compile flags
+core_only_args = []
+if is_msvc
+  core_only_args += '/D_CRT_SECURE_NO_WARNINGS'
+else
+  core_only_args += '-fno-strict-aliasing'
+endif
+if freethreaded
+  core_only_args += '-DNB_FREE_THREADED'
+endif
+if nb_has_mtls_gnu2
+  core_only_args += '-mtls-dialect=gnu2'
+endif
+
+# nanobind_add_module(): extension-only compile flags
+ext_only_args = []
+if is_msvc
+  ext_only_args += '/bigobj'                            # nanobind_compile_options
+  if compiler.get_id() == 'msvc'
+    ext_only_args += '/MP'
   endif
 endif
+if nb_opt_size
+  ext_only_args += is_msvc ? '/Os' : '-Os'             # nanobind_opt_size
+endif
+if nb_opt
+  ext_only_args += is_msvc ? '/GS-' : '-fno-stack-protector'  # nanobind_disable_stack_protector
+endif
 
-if host_machine.system() == 'darwin'
+# nanobind_strip() + nanobind_link_options() (macOS linker response file)
+strip_link = []
+if nb_opt
+  if is_darwin
+    strip_link += ['-Wl,-dead_strip', '-Wl,-x', '-Wl,-S']
+  elif not is_windows
+    strip_link += '-Wl,-s'
+  endif
+endif
+if is_darwin
   py_soabi = py.get_variable('SOABI')
   if py_soabi.startswith('cp')
     resp_file = meson.project_source_root() / 'cmake/darwin-ld-cpython.sym'
   else
     resp_file = meson.project_source_root() / 'cmake/darwin-ld-pypy.sym'
   endif
-  dep_link_args += ['-Wl,@' + resp_file]
+  strip_link += '-Wl,@' + resp_file
 endif
 
+# NB_COMPACT_ASSERTIONS: the linked core in optimized builds. The split backend
+# keeps full assertions (FULL_ASSERTIONS) and therefore omits it.
+compact_assert = nb_opt_size ? ['-DNB_COMPACT_ASSERTIONS'] : []
+
+# Per-target groups consumed by the test suite (tests/meson.build)
+core_compile_args = pub_args + core_only_args + compact_assert
+core_backend_args = pub_args + core_only_args
+ext_compile_args = pub_args + ext_only_args
+ext_link_args = strip_link + pub_link
+
+# Shared-library build: export the core (NB_SHARED/NB_BUILD select NB_CORE)
+shared_defs = []
 if get_option('default_library') == 'shared'
-  dep_compile_args += ['-DNB_SHARED']
-  add_project_arguments(
-    [dep_compile_args, '-DNB_BUILD'],
-    language: 'cpp',
-  )
-  add_project_link_arguments(
-    dep_link_args,
-    language: 'cpp',
-  )
-elif host_machine.system() != 'windows' and host_machine.system() != 'darwin'
-  dep_compile_args += ['-ffunction-sections', '-fdata-sections']
-  add_project_arguments(
-    dep_compile_args,
-    language: 'cpp',
-  )
-  dep_link_args += ['-Wl,--gc-sections']
-else
-  add_project_arguments(
-    dep_compile_args,
-    language: 'cpp',
-  )
+  shared_defs += ['-DNB_SHARED', '-DNB_BUILD']
 endif
+
+# The dependency compiles the core into the consumer's extension, so it carries
+# the union of the core and extension groups.
+dep_compile_args = core_compile_args + ext_only_args + shared_defs
+dep_link_args = ext_link_args
 
 nanobind_sources = files('src/nb_combined.cpp')
 
