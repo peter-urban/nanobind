@@ -17,13 +17,22 @@ project(
 )
 
 py_mod = import('python')
+fs = import('fs')
 py = py_mod.find_installation()
 py_dep = py.dependency()
 
-robin_map_dep = dependency(
-  'tsl-robin-map',
-  version: '>=1.4.0',
-)
+# Prefer the bundled robin-map headers (like the CMake build's git submodule).
+# This also avoids configuring the wrap subproject and building its test suite.
+if fs.is_dir(meson.current_source_dir() / 'ext/robin_map/include')
+  robin_map_dep = declare_dependency(
+    include_directories: include_directories('ext/robin_map/include'),
+  )
+else
+  robin_map_dep = dependency(
+    'tsl-robin-map',
+    version: '>=1.4.0',
+  )
+endif
 
 incdir = include_directories('include')
 
