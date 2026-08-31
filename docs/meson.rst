@@ -133,3 +133,22 @@ by adding the following to ``meson.build``:
 
 Then, after building your module, the build system will use nanobind's command
 line interface for :ref:`stub generation <stubs>`.
+
+.. _meson-windows-stable-abi:
+
+Stable ABI on Windows
+---------------------
+
+On Windows, a stable ABI extension must link against ``python3.lib`` rather than
+the version-tagged ``pythonXY.lib``, otherwise it ends up depending on
+``pythonXY.dll`` and only loads on that specific Python version (`meson issue
+#15172 <https://github.com/mesonbuild/meson/issues/15172>`__). Because a
+nanobind dependency carries its own reference to Python, ``limited_api`` alone
+does not achieve this. Set the ``stable_abi`` option to the same floor version
+so that nanobind links ``python3.lib`` instead:
+
+.. code-block:: sh
+
+   meson setup builddir -Dnanobind:stable_abi=3.12
+
+On Linux and macOS this is a no-op, so it is safe to set unconditionally.

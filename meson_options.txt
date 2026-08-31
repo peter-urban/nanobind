@@ -1,0 +1,5 @@
+# Target the CPython stable ABI (limited API) from this floor version in linked
+# mode, e.g. '3.12'. Empty disables it. Consumers additionally pass the same
+# value as 'limited_api' to extension_module().
+option('stable_abi', type: 'string', value: '',
+       description: 'Linked-mode stable ABI floor, e.g. 3.12 (empty: disabled)')
