@@ -12,3 +12,13 @@ option('split_backend', type: 'string', value: '',
 # not installed.
 option('split_backend_pypi', type: 'string', value: '',
        description: 'PyPI package name for the split-mode backend module')
+
+# The following options drive nanobind's own test suite.
+option('build_tests', type: 'boolean', value: false,
+       description: 'Compile the nanobind test suite')
+
+option('test_stable_abi', type: 'boolean', value: false,
+       description: 'Build the test suite against the stable ABI')
+
+option('test_split_mode', type: 'boolean', value: false,
+       description: 'Build the test suite in split mode')

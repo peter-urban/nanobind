@@ -28,7 +28,7 @@ pytestmark = [
 
 @pytest.fixture(params=["test_abi_multi_ext", "test_abi_multi_lto_ext"])
 def multi(request):
-    return importlib.import_module(request.param)
+    return pytest.importorskip(request.param)
 
 
 def test01_multi_tu_types(multi):

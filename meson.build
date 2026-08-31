@@ -144,6 +144,8 @@ dep_compile_args = core_compile_args + ext_only_args + shared_defs
 dep_link_args = ext_link_args
 
 nanobind_sources = files('src/nb_combined.cpp')
+nanobind_backend_sources = files('src/nb_backend.cpp')
+stubgen_file = files('src/stubgen.py')[0]
 
 # Includes-only Python dependency (no link arguments). Stable-ABI builds use
 # this in place of 'py_dep' so that nanobind does not drag in the version-tagged
@@ -211,3 +213,7 @@ else
 endif
 
 meson.override_dependency('nanobind', nanobind_dep)
+
+if get_option('build_tests')
+  subdir('tests')
+endif
