@@ -1,0 +1,223 @@
+name: Tests (Meson)
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - master
+      - stable
+      - v*
+
+concurrency:
+  group: meson-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The "main" Meson test suite (linked mode) across operating systems and
+  # Python versions, mirroring the CMake 'standard' job.
+  meson-standard:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-latest', 'windows-2022', 'macos-15']
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15', 'pypy3.10-v7.3.19', 'pypy3.11-v7.3.20']
+
+    name: "Python ${{ matrix.python }} / ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Setup Python ${{ matrix.python }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python }}
+        cache: 'pip'
+        allow-prereleases: true
+
+    - name: Setup MSVC
+      if: startsWith(matrix.os, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Eigen
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get -y install libeigen3-dev
+
+    - name: Install build and test dependencies
+      run: |
+        python -m pip install meson ninja pytest pytest-github-actions-annotate-failures typing_extensions
+
+    # Skipped on PyPy and prerelease interpreters, whose binary wheels lag behind
+    - name: Install NumPy
+      if: ${{ !startsWith(matrix.python, 'pypy') && matrix.python != '3.15' }}
+      run: |
+        python -m pip install numpy scipy
+
+    - name: Configure
+      run: >
+        meson setup build -Dbuild_tests=true
+
+    - name: Build C++
+      run: meson compile -C build
+
+    - name: Check ABI tag
+      run: >
+        cd build/tests;
+        python -c 'import test_functions_ext as t; print(f"ABI tag is \"{ t.abi_tag() }\"")'
+
+    - name: Run tests
+      run: >
+        cd build/tests;
+        python -m pytest
+
+  # Free-threaded interpreter, linked mode.
+  meson-free-threaded:
+    name: "Python 3.14t / ubuntu-latest [free-threaded]"
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Setup Python 3.14t (free-threaded)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14t'
+
+    - name: Install build and test dependencies
+      run: |
+        python -m pip install meson ninja pytest pytest-github-actions-annotate-failures
+
+    - name: Configure
+      run: >
+        meson setup build -Dbuild_tests=true
+
+    - name: Build C++
+      run: meson compile -C build
+
+    - name: Run tests
+      run: >
+        cd build/tests;
+        python -m pytest
+
+  # Split mode: extensions resolve a separately compiled backend module at
+  # import time and target the stable ABI.
+  meson-split:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-latest', 'windows-2022', 'macos-15']
+        python: ['3.12']
+
+    name: "Split mode / Python ${{ matrix.python }} / ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Setup Python ${{ matrix.python }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python }}
+        cache: 'pip'
+
+    - name: Setup MSVC
+      if: startsWith(matrix.os, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Eigen
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get -y install libeigen3-dev
+
+    - name: Install build and test dependencies
+      run: |
+        python -m pip install meson ninja pytest pytest-github-actions-annotate-failures typing_extensions numpy scipy
+
+    - name: Configure
+      run: >
+        meson setup build -Dbuild_tests=true -Dtest_split_mode=true
+
+    - name: Build C++
+      run: meson compile -C build
+
+    - name: Run tests
+      run: >
+        cd build/tests;
+        python -m pytest
+
+  # Stable ABI (limited API): builds abi3 extensions with one interpreter and
+  # imports them with a newer one, which is the regression test for the Windows
+  # 'python3.lib' linking bug (meson issue #15172).
+  meson-limited-api:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-latest', 'windows-2022', 'macos-15']
+
+    name: "Limited API (build 3.12, run 3.13) / ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Setup build Python 3.12
+      id: buildpy
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Setup MSVC
+      if: startsWith(matrix.os, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Eigen
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get -y install libeigen3-dev
+
+    - name: Install build and test dependencies
+      run: |
+        "${{ steps.buildpy.outputs.python-path }}" -m pip install meson ninja pytest pytest-github-actions-annotate-failures typing_extensions numpy scipy
+
+    - name: Configure and build abi3 extensions with Python 3.12
+      run: |
+        "${{ steps.buildpy.outputs.python-path }}" -m mesonbuild.mesonmain setup build -Dbuild_tests=true -Dtest_stable_abi=true
+        "${{ steps.buildpy.outputs.python-path }}" -m mesonbuild.mesonmain compile -C build
+
+    - name: Run the suite with Python 3.12
+      run: >
+        cd build/tests;
+        "${{ steps.buildpy.outputs.python-path }}" -m pytest
+
+    # The authoritative check for meson issue #15172: the abi3 extension must
+    # depend on 'python3.dll', never on a version-tagged 'pythonXY.dll'.
+    - name: Verify the abi3 extension links python3.dll
+      if: startsWith(matrix.os, 'windows')
+      shell: pwsh
+      run: |
+        $pyd = Get-ChildItem build/tests/test_functions_ext*.pyd | Select-Object -First 1
+        $deps = dumpbin /dependents $pyd.FullName | Out-String
+        Write-Host $deps
+        if ($deps -match 'python3\d+\.dll') { throw "links version-tagged $($Matches[0])" }
+        if ($deps -notmatch 'python3\.dll') { throw "does not link python3.dll" }
+        Write-Host "OK: depends on python3.dll only"
+
+    - name: Setup run Python 3.13
+      id: runpy
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    # If the extension incorrectly linked 'pythonXY', importing it under a
+    # different Python minor version would fail to find that DLL on Windows.
+    - name: Import the abi3 extension with Python 3.13
+      run: |
+        cd build/tests
+        "${{ steps.runpy.outputs.python-path }}" -c "import test_functions_ext as t; print(f'ABI tag is \"{t.abi_tag()}\"')"
