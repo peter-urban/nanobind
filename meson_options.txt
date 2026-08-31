@@ -3,3 +3,12 @@
 # value as 'limited_api' to extension_module().
 option('stable_abi', type: 'string', value: '',
        description: 'Linked-mode stable ABI floor, e.g. 3.12 (empty: disabled)')
+
+# Build split-mode extensions that resolve this backend module at import time.
+option('split_backend', type: 'string', value: '',
+       description: 'Split-mode backend module name (empty: linked mode)')
+
+# PyPI package advertised in the error message when the backend module above is
+# not installed.
+option('split_backend_pypi', type: 'string', value: '',
+       description: 'PyPI package name for the split-mode backend module')

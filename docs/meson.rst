@@ -152,3 +152,41 @@ so that nanobind links ``python3.lib`` instead:
    meson setup builddir -Dnanobind:stable_abi=3.12
 
 On Linux and macOS this is a no-op, so it is safe to set unconditionally.
+
+.. _meson-split-mode:
+
+Split mode
+----------
+
+The package also supports :ref:`split mode <split-mode>`, where the compiled
+backend ships as a separate ``nanobind-backend`` wheel and each extension
+targets the stable ABI. Enable it through the ``split_backend`` option, which
+names the backend module to resolve at import time, and pass the matching
+stable ABI floor via ``limited_api``:
+
+.. code-block:: meson
+
+   python = import('python').find_installation()
+   nanobind_dep = dependency('nanobind')
+   mod = python.extension_module(
+     'my_module_name',
+     sources: ['path_to_module.cpp'],
+     dependencies: [nanobind_dep],
+     limited_api: '3.10',
+     install: true,
+   )
+
+.. code-block:: sh
+
+   meson setup builddir -Dnanobind:split_backend=nanobind_backend
+
+Then declare the backend as a runtime dependency in ``pyproject.toml``:
+
+.. code-block:: toml
+
+   [project]
+   dependencies = ["nanobind-backend>=1.0"]
+
+Use the ``split_backend_pypi`` option to advertise a different PyPI package name
+in the error message shown when the backend module is missing (for a
+:ref:`custom backend <custom-backend>`).

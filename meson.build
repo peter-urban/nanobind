@@ -167,9 +167,28 @@ endif
 
 stubgen_path = meson.current_source_dir() / 'src/stubgen.py'
 
+backend_module = get_option('split_backend')
 stable_abi = get_option('stable_abi')
 
-if stable_abi != ''
+if backend_module != ''
+  # Split mode: the frontend delegates to a separately compiled backend module
+  # and targets the stable ABI. It does not embed the nanobind core sources.
+  # Consumers pass 'limited_api' to extension_module() for the abi3 suffix and
+  # the Py_LIMITED_API define.
+  split_args = ['-DNB_BACKEND_MODULE=' + backend_module]
+  backend_pypi = get_option('split_backend_pypi')
+  if backend_pypi != ''
+    split_args += '-DNB_BACKEND_PYPI=' + backend_pypi
+  endif
+
+  nanobind_dep = declare_dependency(
+    include_directories: [incdir],
+    dependencies: [py_dep_inc, py_limited_dep],
+    compile_args: ext_compile_args + split_args,
+    link_args: ext_link_args,
+    variables: {'stubgen': stubgen_path},
+  )
+elif stable_abi != ''
   # Linked mode against the stable ABI: compile the core sources, but link the
   # stable 'python3' import library on Windows (see py_limited_dep above).
   nanobind_dep = declare_dependency(
