@@ -145,15 +145,69 @@ dep_link_args = ext_link_args
 
 nanobind_sources = files('src/nb_combined.cpp')
 
-nanobind_dep = declare_dependency(
-  sources: nanobind_sources,
-  include_directories: [incdir],
-  dependencies: [py_dep, robin_map_dep],
-  compile_args: dep_compile_args,
-  link_args: dep_link_args,
-  variables: {
-    'stubgen': meson.current_source_dir() / 'src/stubgen.py',
-  },
-)
+# Includes-only Python dependency (no link arguments). Stable-ABI builds use
+# this in place of 'py_dep' so that nanobind does not drag in the version-tagged
+# 'pythonXY' import library, which would otherwise defeat the limited API on
+# Windows (meson issue #15172).
+py_dep_inc = py_dep.partial_dependency(compile_args: true, includes: true)
+
+# On Windows, a stable-ABI extension links against 'python3.lib' rather than
+# 'pythonXY.lib'. Recent meson can fail to add it (issue #15479), so locate it
+# next to the version-tagged import library and link it explicitly.
+py_limited_dep = declare_dependency()
+if host_machine.system() == 'windows'
+  py_libdir = run_command(
+    py,
+    '-c',
+    'import sysconfig, os; print(os.path.join(sysconfig.get_config_var("installed_base"), "libs"))',
+    check: true,
+  ).stdout().strip()
+  py_limited_dep = compiler.find_library('python3', dirs: [py_libdir])
+endif
+
+stubgen_path = meson.current_source_dir() / 'src/stubgen.py'
+
+backend_module = get_option('split_backend')
+stable_abi = get_option('stable_abi')
+
+if backend_module != ''
+  # Split mode: the frontend delegates to a separately compiled backend module
+  # and targets the stable ABI. It does not embed the nanobind core sources.
+  # Consumers pass 'limited_api' to extension_module() for the abi3 suffix and
+  # the Py_LIMITED_API define.
+  split_args = ['-DNB_BACKEND_MODULE=' + backend_module]
+  backend_pypi = get_option('split_backend_pypi')
+  if backend_pypi != ''
+    split_args += '-DNB_BACKEND_PYPI=' + backend_pypi
+  endif
+
+  nanobind_dep = declare_dependency(
+    include_directories: [incdir],
+    dependencies: [py_dep_inc, py_limited_dep],
+    compile_args: ext_compile_args + split_args,
+    link_args: ext_link_args,
+    variables: {'stubgen': stubgen_path},
+  )
+elif stable_abi != ''
+  # Linked mode against the stable ABI: compile the core sources, but link the
+  # stable 'python3' import library on Windows (see py_limited_dep above).
+  nanobind_dep = declare_dependency(
+    sources: nanobind_sources,
+    include_directories: [incdir],
+    dependencies: [py_dep_inc, py_limited_dep, robin_map_dep],
+    compile_args: dep_compile_args,
+    link_args: dep_link_args,
+    variables: {'stubgen': stubgen_path},
+  )
+else
+  nanobind_dep = declare_dependency(
+    sources: nanobind_sources,
+    include_directories: [incdir],
+    dependencies: [py_dep, robin_map_dep],
+    compile_args: dep_compile_args,
+    link_args: dep_link_args,
+    variables: {'stubgen': stubgen_path},
+  )
+endif
 
 meson.override_dependency('nanobind', nanobind_dep)
