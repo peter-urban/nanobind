@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Build and publish the `nanobind-backend` conda package (the compiled
+# libnanobind backend for nanobind split mode, built with Meson) to the
+# `themachinethatgoesping` anaconda channel.
+#
+# The backend is a full-API, version-specific module, so it is built per
+# platform AND per Python version (see conda.recipe/variants.yaml). It is a
+# stable artifact (no .dev routing), so all builds go to the default 'main'
+# anaconda label.
+#
+# Requires the `ANACONDA_API_TOKEN` secret to be set on this repository for the
+# upload step (see the job below).
+
+name: nanobind-backend conda package
+
+on:
+  push:
+    branches: [meson-v3.1.0]
+    paths:
+      - "meson.build"
+      - "meson_options.txt"
+      - "src/nb_backend.cpp"
+      - "src/nb_combined.cpp"
+      - "include/nanobind/**"
+      - "conda.recipe/**"
+      - ".github/workflows/rattler.yml"
+  pull_request:
+    branches: [meson-v3.1.0]
+    paths:
+      - "meson.build"
+      - "meson_options.txt"
+      - "conda.recipe/**"
+      - ".github/workflows/rattler.yml"
+  # Allow manual publishing from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build nanobind-backend (${{ matrix.target-platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target-platform: linux-64
+            output-dir: output
+          - os: windows-latest
+            target-platform: win-64
+            output-dir: C:/rattler
+          - os: macos-15
+            target-platform: osx-arm64
+            output-dir: output
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # ext/robin_map is a submodule (bundled robin-map)
+
+      - name: Build conda package
+        uses: prefix-dev/rattler-build-action@v0.2.34
+        with:
+          recipe-path: conda.recipe/recipe.yaml
+          artifact-name: nanobind-backend-${{ matrix.target-platform }}
+          build-args: --output-dir=${{ matrix.output-dir }} --channel https://prefix.dev/conda-forge --target-platform ${{ matrix.target-platform }}
+
+      - name: Upload to Anaconda
+        if: github.event_name != 'pull_request'
+        run: |
+          pip install anaconda-client
+          PACKAGE_DIR="${{ matrix.output-dir }}"
+          # nanobind-backend is a stable artifact -> default 'main' label.
+          # --force overwrites an existing build of the same version/python.
+          find "$PACKAGE_DIR" \( -name "*.conda" -o -name "*.tar.bz2" \) | while read package; do
+            echo "Uploading $(basename "$package") to anaconda.org (themachinethatgoesping)"
+            anaconda -t "$ANACONDA_API_TOKEN" upload "$package" --user themachinethatgoesping --force
+          done
+        shell: bash
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
