@@ -59,3 +59,16 @@ option(
   value: false,
   description: 'Compile libnanobind with -mtls-dialect=gnu2 (faster TLS, needs newer glibc).',
 )
+
+# Path or name of the Python interpreter to build against. Defaults to the
+# 'python3' found on PATH. Set this (e.g. to the conda/rattler $PYTHON) when the
+# interpreter that should be targeted is NOT the first python3 on PATH -- this
+# is required in conda builds, where the build environment ships its own python
+# for running meson that would otherwise shadow the host (target) python.
+option(
+  'python_path',
+  type: 'string',
+  value: 'python3',
+  description: 'Name or path of the Python interpreter to build against.',
+  yield: true,
+)

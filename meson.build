@@ -15,7 +15,7 @@ project(
 )
 
 py_mod = import('python')
-py = py_mod.find_installation()
+py = py_mod.find_installation(get_option('python_path'))
 py_dep = py.dependency()
 
 # Prefer the bundled robin_map submodule (ext/robin_map), matching the upstream
