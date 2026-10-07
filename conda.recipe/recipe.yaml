@@ -39,8 +39,6 @@ build:
   script:
     - if: unix
       then:
-        # macOS: build against libc++ and the pinned deployment target.
-        - if [ "$(uname)" = "Darwin" ]; then export MACOSX_DEPLOYMENT_TARGET=14.0; export CXXFLAGS="-stdlib=libc++ $CXXFLAGS"; fi
         - meson setup builddir -Dnb_build_backend=true --buildtype=release --prefix=$PREFIX -Dpython.allow_limited_api=false
         - meson compile -C builddir
         # install the compiled backend module straight into site-packages
@@ -48,11 +46,8 @@ build:
     - if: win
       then:
         - meson setup builddir -Dnb_build_backend=true --buildtype=release --prefix=%PREFIX%
-        - if: errorlevel 1 exit 1
         - meson compile -C builddir
-        - if: errorlevel 1 exit 1
         - copy builddir\nanobind_backend*.pyd %SP_DIR%\
-        - if: errorlevel 1 exit 1
 
 requirements:
   build:
