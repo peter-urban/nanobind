@@ -39,15 +39,13 @@ build:
   script:
     - if: unix
       then:
-        - meson setup builddir -Dnb_build_backend=true --buildtype=release --prefix=$PREFIX -Dpython.allow_limited_api=false
-        - meson compile -C builddir
-        # install the compiled backend module straight into site-packages
-        - cp builddir/nanobind_backend*.so "$SP_DIR/"
+        - meson setup builddir -Dnb_build_backend=true -Dpython_path=$PYTHON --buildtype=release --prefix=$PREFIX -Dpython.allow_limited_api=false
+        # meson installs the module into $PREFIX/lib/pythonX.Y/site-packages
+        - meson install -C builddir
     - if: win
       then:
-        - meson setup builddir -Dnb_build_backend=true --buildtype=release --prefix=%PREFIX%
-        - meson compile -C builddir
-        - copy builddir\nanobind_backend*.pyd %SP_DIR%\
+        - meson setup builddir -Dnb_build_backend=true -Dpython_path=%PYTHON% --buildtype=release --prefix=%PREFIX%
+        - meson install -C builddir
 
 requirements:
   build:
