@@ -43,3 +43,10 @@ py\.typed
 .mypy_cache
 nanobind-backend/build/
 nanobind-backend/dist/
+
+# rattler-build / conda recipe build artifacts (must be excluded from the
+# `source: path: ..` copy, otherwise building a second python variant would
+# recursively copy the first variant's output and explode the path length).
+/output/
+/builddir/
+builddir/

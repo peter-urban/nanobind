@@ -59,10 +59,20 @@ requirements:
     - python
 
 tests:
+  # 1) The module imports cleanly on the build Python.
   - python:
       imports:
         - nanobind_backend
       pip_check: false
+  # 2) Functional smoke test: the backend must expose the split-mode entry
+  #    point 'fill' (callable), which frontends invoke at import time to
+  #    populate their function table. This verifies the compiled module loads
+  #    and advertises the backend ABI, not just that the name imports.
+  - script:
+      - python -c "import nanobind_backend as nb; assert hasattr(nb, 'fill'), 'missing fill() entry point'; assert callable(nb.fill), 'fill() is not callable'; print('nanobind_backend OK:', nb.__file__)"
+    requirements:
+      run:
+        - python
 
 about:
   homepage: https://github.com/wjakob/nanobind
