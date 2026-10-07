@@ -45,10 +45,13 @@ jobs:
         include:
           - os: ubuntu-latest
             target-platform: linux-64
+            output-dir: /tmp/rattler
           - os: windows-latest
             target-platform: win-64
+            output-dir: C:/rattler
           - os: macos-15
             target-platform: osx-arm64
+            output-dir: /tmp/rattler
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,20 +65,21 @@ jobs:
           rattler-build-version: v0.62.0
           recipe-path: conda.recipe/recipe.yaml
           artifact-name: nanobind-backend-${{ matrix.target-platform }}
-          # IMPORTANT: the output dir is OUTSIDE the checkout. The recipe uses
-          # `source: path: ..` (the repo), so an in-repo output dir would be
-          # copied into each variant's work dir -- building the 2nd python
-          # variant would then recursively copy the 1st variant's output and
-          # blow past the filesystem path limit (ENAMETOOLONG). runner.temp is
-          # outside $GITHUB_WORKSPACE. (output/ is also gitignored as a second
-          # line of defence, since path sources honour .gitignore by default.)
-          build-args: --output-dir=${{ runner.temp }}/rattler --channel https://prefix.dev/conda-forge --target-platform ${{ matrix.target-platform }}
+          # IMPORTANT: the output dir is OUTSIDE the checkout, and uses FORWARD
+          # slashes. The recipe uses `source: path: ..` (the repo), so an in-repo
+          # output dir would be copied into each variant's work dir -- building
+          # the 2nd python variant would then recursively copy the 1st variant's
+          # output and blow past the filesystem path limit (ENAMETOOLONG).
+          # (output/ is also gitignored as a second line of defence.) Do NOT use
+          # ${{ runner.temp }} here: on Windows it is a backslash path
+          # (D:\a\_temp) that gets mangled in the bash upload step below.
+          build-args: --output-dir=${{ matrix.output-dir }} --channel https://prefix.dev/conda-forge --target-platform ${{ matrix.target-platform }}
 
       - name: Upload to Anaconda
         if: github.event_name != 'pull_request'
         run: |
           pip install anaconda-client
-          PACKAGE_DIR="${{ runner.temp }}/rattler"
+          PACKAGE_DIR="${{ matrix.output-dir }}"
           # nanobind-backend is a stable artifact -> default 'main' label.
           # --force overwrites an existing build of the same version/python.
           find "$PACKAGE_DIR" \( -name "*.conda" -o -name "*.tar.bz2" \) | while read package; do
