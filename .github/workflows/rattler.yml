@@ -57,6 +57,9 @@ jobs:
       - name: Build conda package
         uses: prefix-dev/rattler-build-action@v0.2.34
         with:
+          # Pin a rattler-build matching the one validated locally (the action's
+          # default v0.44.0 is older).
+          rattler-build-version: v0.62.0
           recipe-path: conda.recipe/recipe.yaml
           artifact-name: nanobind-backend-${{ matrix.target-platform }}
           # IMPORTANT: the output dir is OUTSIDE the checkout. The recipe uses

@@ -44,6 +44,13 @@ build:
         - meson install -C builddir
     - if: win
       then:
+        # Use clang-cl (not cl.exe). This mirrors the themachinethatgoesping
+        # main package: the conda vs2022 activation does not reliably put cl.exe
+        # on PATH for meson to detect, and clang-cl shares the same nanobind
+        # platform ABI tag (/MD "_md_mscver19") as the clang-cl-built frontends.
+        - set CC=clang-cl
+        - set CXX=clang-cl
+        - set AR=llvm-lib
         - meson setup builddir -Dnb_build_backend=true -Dpython_path=%PYTHON% --buildtype=release --prefix=%PREFIX%
         - meson install -C builddir
 
@@ -53,8 +60,16 @@ requirements:
     - ninja
     - ${{ compiler('c') }}
     - ${{ compiler('cxx') }}
+    - if: win
+      then:
+        - clang       # provides clang-cl
+        - lld         # lld-link
+        - llvm-tools  # llvm-lib
   host:
     - python
+    - if: win
+      then:
+        - vs2022_win-64  # MSVC STL + Windows SDK activation used by clang-cl
   run:
     - python
 
