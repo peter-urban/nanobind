@@ -1,0 +1,12 @@
+# Build one nanobind-backend per supported Python version. The backend is a
+# full-API (version-specific) module, so it must be built for each interpreter.
+# This matches themachinethatgoesping's supported range (Python 3.12-3.14).
+python:
+- "3.12"
+- "3.13"
+- "3.14"
+
+# Raise the macOS deployment target at compiler-activation time (the export in
+# recipe.yaml runs too late to affect -mmacosx-version-min).
+MACOSX_DEPLOYMENT_TARGET:
+- "14.0"

@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Options for the Meson build of nanobind. The Meson build mirrors the upstream
+# CMake build as closely as is practical and additionally supports nanobind's
+# "split mode" (frontend extensions + a shared compiled backend module).
+# See https://nanobind.readthedocs.io/en/latest/split_mode.html
+#
+# Note: option names are prefixed with 'nb_' because Meson reserves the bare
+# 'backend' option name (its core build-backend selector).
+
+# Build and install the compiled split-mode backend module (the libnanobind
+# backend served to split-mode extensions). When disabled, this project only
+# provides the 'nanobind' and 'nanobind-frontend' dependencies for consumers.
+# The 'nanobind-backend' conda/pip package is produced by enabling this.
+option(
+  'nb_build_backend',
+  type: 'boolean',
+  value: false,
+  description: 'Build and install the compiled nanobind backend module (split mode).',
+)
+
+# Import name of the backend module. Must match the NB_BACKEND_MODULE that
+# split-mode extensions are compiled against (the 'nanobind-frontend' dep uses
+# the same value).
+option(
+  'nb_backend_module',
+  type: 'string',
+  value: 'nanobind_backend',
+  description: 'Python import name of the split-mode backend module.',
+)
+
+# Associated PyPI distribution name, used only to craft a helpful "pip install"
+# hint when the backend module is missing at runtime.
+option(
+  'nb_backend_pypi',
+  type: 'string',
+  value: 'nanobind-backend',
+  description: 'PyPI distribution name of the backend package (for error hints).',
+)
+
+# Stable ABI floor (abi3) targeted by split-mode extensions built against the
+# 'nanobind-frontend' dependency. nanobind supports a floor of 3.10 and newer.
+option(
+  'nb_stable_abi',
+  type: 'string',
+  value: '3.12',
+  description: 'Stable ABI (abi3) floor for split-mode frontend extensions.',
+)
+
+# Use the faster GNU2 (TLS descriptors) thread-local model for libnanobind, as
+# the upstream CMake build does. This improves thread_local access performance
+# but makes the resulting binary require a runtime glibc that provides the
+# GLIBC_ABI_GNU2_TLS version node. Disable it (the default here) for maximum
+# portability of a *distributed* backend package, where the tiny TLS speedup is
+# not worth the stricter glibc requirement.
+option(
+  'nb_tls_dialect_gnu2',
+  type: 'boolean',
+  value: false,
+  description: 'Compile libnanobind with -mtls-dialect=gnu2 (faster TLS, needs newer glibc).',
+)

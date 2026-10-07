@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Conda recipe for `nanobind-backend`: the compiled libnanobind backend served
+# to nanobind split-mode extensions. It is built here with Meson (see the
+# top-level meson.build, option `nb_build_backend`) and published to the
+# `themachinethatgoesping` anaconda channel. It mirrors the PyPI package of the
+# same name, which is NOT available on conda-forge.
+#
+# The backend is a normal (full-API, version-specific) extension module, so it
+# is built once per Python version (see variants.yaml). Split-mode extensions
+# depend on it at runtime via `nanobind-backend >=1.0` (no upper bound / pin:
+# newer backends always serve older extensions).
+#
+# ABI note: the backend and the frontend extensions must agree on the platform
+# ABI (compiler family, C++ standard library, CRT flavor on Windows). We build
+# with the conda-forge default toolchain on Linux/macOS and the MSVC (/MD)
+# toolchain on Windows. clang-cl and MSVC cl share the same nanobind platform
+# ABI tag ("_md_mscver19"), so a cl-built backend serves clang-cl-built
+# frontends. See https://nanobind.readthedocs.io/en/latest/split_mode.html
+
+context:
+  # nanobind backend ABI version (NB_BACKEND_ABI_MAJOR.MINOR.REVISION). Keep in
+  # sync with the nanobind release on this branch (`python src/version.py`
+  # prints "nanobind-backend 1.0.0"). Frontends require `nanobind-backend >=1.0`.
+  version: "1.0.0"
+
+package:
+  name: nanobind-backend
+  version: ${{ version }}
+
+source:
+  # Build from this repository (the recipe lives in conda.recipe/).
+  path: ..
+
+build:
+  number: 0
+  # The backend is version-specific (full API), so it is not noarch; one build
+  # per Python version via variants.yaml.
+  script:
+    - if: unix
+      then:
+        # macOS: build against libc++ and the pinned deployment target.
+        - if [ "$(uname)" = "Darwin" ]; then export MACOSX_DEPLOYMENT_TARGET=14.0; export CXXFLAGS="-stdlib=libc++ $CXXFLAGS"; fi
+        - meson setup builddir -Dnb_build_backend=true --buildtype=release --prefix=$PREFIX -Dpython.allow_limited_api=false
+        - meson compile -C builddir
+        # install the compiled backend module straight into site-packages
+        - cp builddir/nanobind_backend*.so "$SP_DIR/"
+    - if: win
+      then:
+        - meson setup builddir -Dnb_build_backend=true --buildtype=release --prefix=%PREFIX%
+        - if: errorlevel 1 exit 1
+        - meson compile -C builddir
+        - if: errorlevel 1 exit 1
+        - copy builddir\nanobind_backend*.pyd %SP_DIR%\
+        - if: errorlevel 1 exit 1
+
+requirements:
+  build:
+    - meson >=1.1.0
+    - ninja
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+  host:
+    - python
+  run:
+    - python
+
+tests:
+  - python:
+      imports:
+        - nanobind_backend
+      pip_check: false
+
+about:
+  homepage: https://github.com/wjakob/nanobind
+  summary: Compiled nanobind backend for extensions built in split mode (Meson build; themachinethatgoesping channel).
+  description: |
+    The compiled backend part of the nanobind C++ binding library. It serves
+    extension modules built in nanobind "split mode", in which the extension
+    delegates to this externally hosted backend instead of shipping its own.
+    End users receive it as a transitive dependency and do not use it directly.
+
+    This package is built with the Meson build system (option
+    `nb_build_backend`) rather than the upstream CMake command
+    `nanobind_add_backend`, so that projects building with meson-python can
+    depend on a matching backend.
+  license: BSD-3-Clause
+  license_file: LICENSE
+  repository: https://github.com/wjakob/nanobind
+  documentation: https://nanobind.readthedocs.io/en/latest/split_mode.html
