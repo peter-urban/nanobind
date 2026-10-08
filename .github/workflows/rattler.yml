@@ -79,12 +79,20 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           pip install anaconda-client
-          PACKAGE_DIR="${{ matrix.output-dir }}"
+          # Only the package output subdirs hold the built conda packages; do NOT
+          # scan the whole --output-dir (it also contains rattler-build's working
+          # tree and caches, e.g. <output-dir>/bld/.../*.tar.bz2 and
+          # <output-dir>/pkg_cache/*.conda), which `anaconda upload` would reject
+          # as "not a valid installer". The backend lands in
+          # <output-dir>/<platform>/; noarch is covered too for safety.
           # nanobind-backend is a stable artifact -> default 'main' label.
           # --force overwrites an existing build of the same version/python.
-          find "$PACKAGE_DIR" \( -name "*.conda" -o -name "*.tar.bz2" \) | while read package; do
-            echo "Uploading $(basename "$package") to anaconda.org (themachinethatgoesping)"
-            anaconda -t "$ANACONDA_API_TOKEN" upload "$package" --user themachinethatgoesping --force
+          for d in "${{ matrix.output-dir }}/${{ matrix.target-platform }}" "${{ matrix.output-dir }}/noarch"; do
+            [ -d "$d" ] || continue
+            find "$d" -maxdepth 1 \( -name "*.conda" -o -name "*.tar.bz2" \) | while read package; do
+              echo "Uploading $(basename "$package") to anaconda.org (themachinethatgoesping)"
+              anaconda -t "$ANACONDA_API_TOKEN" upload "$package" --user themachinethatgoesping --force
+            done
           done
         shell: bash
         env:
