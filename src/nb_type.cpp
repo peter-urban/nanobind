@@ -1551,6 +1551,12 @@ static PyObject *nb_type_new_impl(nb_internals *p, const type_data_init *t) {
                              "nanobind: type '%s' was already registered!\n",
                              t_name) != 0)
             warning_failed();
+        // Idempotent re-registration (e.g. a module whose multi-phase init body
+        // runs twice in one process): bind the already-registered type into the
+        // new scope so the re-exec'd module stays fully populated instead of
+        // being left empty.
+        if (t->scope != nullptr)
+            setattr_str(p, t->scope, t_name, 0, existing);
         if (has_signature)
             free((char *) t_name);
         return existing;

@@ -38,6 +38,13 @@ static PyObject *enum_create_impl(nb_internals *p, const enum_data_init *ed) {
                              "nanobind: type '%s' was already registered!\n",
                              ed->name) != 0)
             warning_failed();
+        // Idempotent re-registration (e.g. a module whose multi-phase init body
+        // runs twice in one process): bind the already-registered enum into the
+        // new scope so the re-exec'd module stays fully populated.
+        if (ed->scope) {
+            if (PyObject_SetAttrString(ed->scope, ed->name, existing) != 0)
+                PyErr_Clear();
+        }
         return existing;
     }
 
@@ -202,8 +209,10 @@ static void enum_append_impl(PyObject *tp_, const char *name_, int64_t value_,
     str name(name_);
 
     if (member_map.contains(name))
-        fail("refusing to add duplicate key \"%s\" to enumeration \"%s\"!",
-             name_, type_name(tp).c_str());
+        // Idempotent re-registration: if this enum member already exists (e.g.
+        // because the module's multi-phase init body ran twice in one process),
+        // silently skip it instead of aborting the interpreter.
+        return;
 
     # if PY_VERSION_HEX >= 0x030B0000
     // In Python 3.11+, update the flag and bit masks by hand,
